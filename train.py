@@ -172,7 +172,7 @@ class Trainer:
 
 
     def before_epoch(self):
-        # self.train_loader = build_train_loader(self.cfg["TRAIN"]["DATALOADER"]["MINIBATCH_SIZE_PER_DIVICE"])
+        self.train_loader = build_train_loader(self.cfg["TRAIN"]["DATALOADER"]["MINIBATCH_SIZE_PER_DIVICE"])
         self.model.train()
 
     def after_epoch(self):
@@ -182,6 +182,7 @@ class Trainer:
         for self.iter in range(self.max_iter):
             batch_data = next(self.train_loader)
             self.train_one_iter(batch_data)
+
 
 
     def stat_mem(self):
@@ -197,7 +198,6 @@ class Trainer:
         lr = get_learning_rate(self.epoch, self.iter, self.base_lr, self.max_iter, self.warmup_epoch, self.max_epoch)
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = lr
-
         image = Tensor(batch_data['img']).cuda(self.local_rank).float()
         del batch_data['img']
 
@@ -210,9 +210,7 @@ class Trainer:
         with torch.autocast(device_type='cuda', dtype=torch.float16):
             losses = self.model(image, batch_data)
             loss = losses['total_loss']
-
         self.grad_scaler.scale(loss).backward()
-
         if self.cfg['TRAIN'].get("CLIP_GRAD", None) is not None:
             self.grad_scaler.unscale_(self.optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.cfg['TRAIN']['CLIP_GRAD']['MAX_NORM'])
@@ -221,7 +219,7 @@ class Trainer:
 
         self.grad_scaler.step(self.optimizer)
         self.grad_scaler.update()
-
+        
         cur_time = time.time()
         if self.rank == 0 and self.iter % 10 == 0:
             ttrain = cur_time - iter_start_time

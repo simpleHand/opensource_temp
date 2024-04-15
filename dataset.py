@@ -19,19 +19,29 @@ NORMALIZE_3D_GT = DATA_CFG['NORMALIZE_3D_GT']
 AUG_CFG: Dict = DATA_CFG["AUG"]
 ROOT_INDEX = DATA_CFG['ROOT_INDEX']
 
+def read_info(img_path):
+    info_path = img_path.replace('.jpg', '.json')
+    with open(info_path) as f:
+        info = json.load(f)
+    return info
+
+with open(DATA_CFG['JSON_DIR']) as f:
+    all_image_info = json.load(f)
+all_info = []
+for image_path in tqdm(all_image_info):
+    info = read_info(image_path)
+    info['image_path'] = image_path
+    all_info.append(info)
+
 class HandDataset(Dataset):
-    def __init__(self, image_json):
+    def __init__(self, all_info):
         super().__init__()
 
         self.init_aug_funcs()
-        with open(image_json) as f:
-            self.all_image_info = json.load(f)
-        self.all_info = {}
-        for image_path in tqdm(self.all_image_info):
-            self.all_info[image_path] = self.read_info(image_path)
+        self.all_info = all_info
 
     def __len__(self):
-        return len(self.all_image_info)
+        return len(self.all_info)
     
     def init_aug_funcs(self):
         self.random_channel_noise = RandomChannelNoise(**AUG_CFG['RandomChannelNoise'])
@@ -47,18 +57,10 @@ class HandDataset(Dataset):
     def read_image(self, img_path):
         img = cv2.imread(img_path)
         return img
-
-    def read_info(self, img_path):
-        info_path = img_path.replace('.jpg', '.json')
-        with open(info_path) as f:
-            info = json.load(f)
-        return info
     
     def __getitem__(self, index):
-        image_path = self.all_image_info[index]
-        img = self.read_image(image_path)
-        data_info = self.all_info[image_path]
-        data_info['img'] = img
+        data_info = self.all_info[index]
+        img = self.read_image(data_info['image_path'])
         # keypoints2d = np.array(data_info['uv'], dtype=np.float32)
         keypoints3d = np.array(data_info['xyz'], dtype=np.float32)
         K = np.array(data_info['K'], dtype=np.float32)
@@ -157,16 +159,16 @@ class HandDataset(Dataset):
         return data
 
 def build_train_loader(batch_size):
-	dataset = HandDataset(DATA_CFG['JSON_DIR'])
+	dataset = HandDataset(all_info)
 	sampler = RandomSampler(dataset, replacement=True)
-	dataloader = cycle(DataLoader(dataset, batch_size=batch_size, sampler=sampler))
+	dataloader = (DataLoader(dataset, batch_size=batch_size, sampler=sampler))
 	return iter(dataloader)
 
-if __name__ == "__main__":
-    train_loader = build_train_loader(_CONFIG['TRAIN']['DATALOADER']['MINIBATCH_SIZE_PER_DIVICE'])
-    batch = next(train_loader)
-    with open('batch_data.pkl', 'rb') as f:
-        pickle.dump(batch, f)
-    from IPython import embed 
-    embed()
-    exit()
+# if __name__ == "__main__":
+#     train_loader = build_train_loader(_CONFIG['TRAIN']['DATALOADER']['MINIBATCH_SIZE_PER_DIVICE'])
+#     batch = next(train_loader)
+#     with open('batch_data.pkl', 'rb') as f:
+#         pickle.dump(batch, f)
+#     from IPython import embed 
+#     embed()
+#     exit()
